@@ -4,19 +4,21 @@ class AppConstants {
   static const appName = 'PeakMoto';
   static const appVersion = '0.1.0';
 
-  // Default tile server (OSM fallback until own tiles are ready)
-  static const tileUrlTemplate =
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  // Map tiles – clean grayscale basemaps
+  static const tileUrlDark =
+      'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png';
+  static const tileUrlLight =
+      'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png';
 
-  // BRouter API (self-hosted)
-  static const brouterBaseUrl = 'https://brouter.peakmoto.app';
+  // GraphHopper Routing API (self-hosted)
+  static const routingBaseUrl = 'https://routing.peakmoto.app';
 
-  // Nominatim (self-hosted)
-  static const nominatimBaseUrl = 'https://nominatim.peakmoto.app';
+  // Photon Geocoding (self-hosted, fallback to komoot)
+  static const photonHost = 'photon.peakmoto.app';
 
-  // Default map center (Germany)
-  static const defaultLat = 48.7758;
-  static const defaultLng = 9.1829; // Stuttgart
+  // Default map center / Desktop fallback GPS
+  static const defaultLat = 51.7640;
+  static const defaultLng = 8.7340; // Marienloh, Paderborn
 
   // Touch targets for glove-friendly UI
   static const minTouchTarget = 64.0;

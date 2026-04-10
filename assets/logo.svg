@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <circle cx="256" cy="256" r="256" fill="#1A1A1A"/>
+
+  <!-- Three peaks - center tallest, sides lower -->
+  <path d="M80 330 L170 220 L215 270 L280 130 L345 270 L390 220 L460 330"
+        fill="none" stroke="#FF9500" stroke-width="20" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- S-curve road - right side of mountain, no crossing -->
+  <path d="M240 395 C280 380 330 355 320 320 C310 285 260 280 270 250 C280 220 310 210 300 185"
+        fill="none" stroke="#FF9500" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Text -->
+  <text x="256" y="460" text-anchor="middle" font-family="sans-serif" font-weight="700" font-size="48" fill="#FFFFFF" letter-spacing="5">PEAKMOTO</text>
+</svg>

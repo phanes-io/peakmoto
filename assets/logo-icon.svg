@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="108" fill="#1A1A1A"/>
+
+  <!-- Three peaks - center tallest, sides lower -->
+  <path d="M60 345 L155 225 L205 280 L275 125 L345 280 L390 225 L470 345"
+        fill="none" stroke="#FF9500" stroke-width="26" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- S-curve road - right side, no crossing -->
+  <path d="M240 415 C285 395 340 365 330 325 C320 285 265 280 275 248 C285 218 318 208 305 180"
+        fill="none" stroke="#FF9500" stroke-width="18" stroke-linecap="round"/>
+</svg>
