@@ -58,8 +58,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               const SizedBox(height: 8),
               _RouteMenuItem(
                 icon: Icons.search_rounded,
-                label: 'Search Destination',
-                subtitle: 'Route to a specific place',
+                label: 'Ziel suchen',
+                subtitle: 'Route zu einem bestimmten Ort',
                 onTap: () {
                   Navigator.pop(context);
                   _openSearch();
@@ -68,8 +68,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               Divider(height: 0.5, indent: 56, color: theme.dividerColor),
               _RouteMenuItem(
                 icon: Icons.loop_rounded,
-                label: 'Round Trip',
-                subtitle: 'Ride a loop and come back',
+                label: 'Rundtour',
+                subtitle: 'Eine Runde fahren und zurückkommen',
                 onTap: () {
                   Navigator.pop(context);
                   _openRoundTrip();
@@ -363,7 +363,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              'Where to?',
+                              'Wohin?',
                               style: TextStyle(
                                 color: theme.textTheme.bodyMedium?.color,
                                 fontSize: 16,
@@ -468,7 +468,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  TabBarItem(icon: Icons.map_rounded, label: 'Map', isActive: !routing.hasRoute, onTap: () {}),
+                  TabBarItem(icon: Icons.map_rounded, label: 'Karte', isActive: !routing.hasRoute, onTap: () {}),
                   TabBarItem(
                     icon: Icons.route_rounded,
                     label: 'Route',
@@ -477,7 +477,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                   TabBarItem(
                     icon: Icons.bookmark_outline_rounded,
-                    label: 'Saved',
+                    label: 'Gespeichert',
                     onTap: () => showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
@@ -487,7 +487,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   ),
                   TabBarItem(
                     icon: Icons.person_outline_rounded,
-                    label: 'Settings',
+                    label: 'Mehr',
                     onTap: () => showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,

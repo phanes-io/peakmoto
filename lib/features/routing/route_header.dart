@@ -179,7 +179,7 @@ class _AddStopRow extends StatelessWidget {
             Icon(Icons.add_circle_outline_rounded, size: 16, color: AppColors.amber.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
-              'Add stop',
+              'Stopp hinzufügen',
               style: TextStyle(
                 fontSize: 13,
                 color: AppColors.amber.withValues(alpha: 0.6),

@@ -67,13 +67,13 @@ class _RoundTripSheetState extends State<RoundTripSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Round Trip', style: theme.textTheme.headlineLarge),
+              Text('Rundtour', style: theme.textTheme.headlineLarge),
               const SizedBox(height: 4),
-              Text('Ride a loop and come back', style: theme.textTheme.bodyMedium),
+              Text('Eine Runde fahren und zurückkommen', style: theme.textTheme.bodyMedium),
               const SizedBox(height: 24),
 
               // Duration
-              _SectionLabel(icon: Icons.timer_outlined, label: 'Duration', value: _durationLabel),
+              _SectionLabel(icon: Icons.timer_outlined, label: 'Dauer', value: _durationLabel),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -92,7 +92,7 @@ class _RoundTripSheetState extends State<RoundTripSheet> {
               // Direction – compass
               _SectionLabel(
                 icon: Icons.explore_outlined,
-                label: 'Direction',
+                label: 'Richtung',
                 value: _directions[_headingIndex],
               ),
               const SizedBox(height: 12),
@@ -103,17 +103,17 @@ class _RoundTripSheetState extends State<RoundTripSheet> {
               const SizedBox(height: 20),
 
               // Route style
-              _SectionLabel(icon: Icons.turn_slight_right_rounded, label: 'Route Style', value: ''),
+              _SectionLabel(icon: Icons.turn_slight_right_rounded, label: 'Routenstil', value: ''),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _StyleBtn(label: 'Fast', isActive: _curvinessLevel == 0, onTap: () => setState(() => _curvinessLevel = 0)),
+                  _StyleBtn(label: 'Schnell', isActive: _curvinessLevel == 0, onTap: () => setState(() => _curvinessLevel = 0)),
                   const SizedBox(width: 5),
-                  _StyleBtn(label: 'Balanced', isActive: _curvinessLevel == 1, onTap: () => setState(() => _curvinessLevel = 1)),
+                  _StyleBtn(label: 'Ausgewogen', isActive: _curvinessLevel == 1, onTap: () => setState(() => _curvinessLevel = 1)),
                   const SizedBox(width: 5),
-                  _StyleBtn(label: 'Curvy', isActive: _curvinessLevel == 2, onTap: () => setState(() => _curvinessLevel = 2)),
+                  _StyleBtn(label: 'Kurvig', isActive: _curvinessLevel == 2, onTap: () => setState(() => _curvinessLevel = 2)),
                   const SizedBox(width: 5),
-                  _StyleBtn(label: 'Twisty', isActive: _curvinessLevel == 3, onTap: () => setState(() => _curvinessLevel = 3)),
+                  _StyleBtn(label: 'Extrem', isActive: _curvinessLevel == 3, onTap: () => setState(() => _curvinessLevel = 3)),
                 ],
               ),
               const SizedBox(height: 24),
@@ -134,7 +134,7 @@ class _RoundTripSheetState extends State<RoundTripSheet> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Text(
-                    'Generate Route',
+                    'Route generieren',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.black,

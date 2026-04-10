@@ -101,7 +101,7 @@ class RouteCard extends StatelessWidget {
                   if (i > 0) const SizedBox(width: 6),
                   Expanded(
                     child: _RouteOption(
-                      label: i == 0 ? 'Fastest' : 'Scenic ${i > 1 ? i : ''}',
+                      label: i == 0 ? 'Schnellste' : 'Landschaft ${i > 1 ? i : ''}',
                       distance: routes[i].distanceFormatted,
                       duration: routes[i].durationFormatted,
                       isActive: selectedIndex == i,
@@ -118,28 +118,28 @@ class RouteCard extends StatelessWidget {
           Row(
             children: [
               _StyleButton(
-                label: 'Fast',
+                label: 'Schnell',
                 icon: Icons.speed_rounded,
                 isActive: prefs.curvinessLevel == 0,
                 onTap: () => onPrefsChanged(prefs.copyWith(curvinessLevel: 0)),
               ),
               const SizedBox(width: 5),
               _StyleButton(
-                label: 'Balanced',
+                label: 'Ausgewogen',
                 icon: Icons.balance_rounded,
                 isActive: prefs.curvinessLevel == 1,
                 onTap: () => onPrefsChanged(prefs.copyWith(curvinessLevel: 1)),
               ),
               const SizedBox(width: 5),
               _StyleButton(
-                label: 'Curvy',
+                label: 'Kurvig',
                 icon: Icons.turn_slight_right_rounded,
                 isActive: prefs.curvinessLevel == 2,
                 onTap: () => onPrefsChanged(prefs.copyWith(curvinessLevel: 2)),
               ),
               const SizedBox(width: 5),
               _StyleButton(
-                label: 'Twisty',
+                label: 'Extrem',
                 icon: Icons.all_inclusive_rounded,
                 isActive: prefs.curvinessLevel == 3,
                 onTap: () => onPrefsChanged(prefs.copyWith(curvinessLevel: 3)),
@@ -154,19 +154,19 @@ class RouteCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               _ToggleChip(
-                label: 'Highways',
+                label: 'Autobahn',
                 icon: Icons.add_road_rounded,
                 avoided: prefs.avoidHighways,
                 onTap: () => onPrefsChanged(prefs.copyWith(avoidHighways: !prefs.avoidHighways)),
               ),
               _ToggleChip(
-                label: 'Tolls',
+                label: 'Maut',
                 icon: Icons.toll_rounded,
                 avoided: prefs.avoidTolls,
                 onTap: () => onPrefsChanged(prefs.copyWith(avoidTolls: !prefs.avoidTolls)),
               ),
               _ToggleChip(
-                label: 'Ferries',
+                label: 'Fähren',
                 icon: Icons.directions_boat_rounded,
                 avoided: prefs.avoidFerries,
                 onTap: () => onPrefsChanged(prefs.copyWith(avoidFerries: !prefs.avoidFerries)),
@@ -186,7 +186,7 @@ class RouteCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
-                'Start Navigation',
+                'Navigation starten',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.black,
@@ -357,7 +357,7 @@ class _ToggleChip extends StatelessWidget {
             ),
             const SizedBox(width: 5),
             Text(
-              avoided ? 'No $label' : label,
+              avoided ? 'Keine $label' : label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,

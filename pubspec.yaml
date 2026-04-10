@@ -30,6 +30,7 @@ dependencies:
   # UI
   cupertino_icons: ^1.0.8
   url_launcher: ^6.2.0
+  wakelock_plus: ^1.5.1
 
 dev_dependencies:
   flutter_test:

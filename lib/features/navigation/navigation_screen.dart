@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/constants.dart';
 import '../../core/theme/app_colors.dart';
@@ -56,6 +57,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void initState() {
     super.initState();
     _route = widget.route;
+    WakelockPlus.enable();
     _initTts();
     _startGpsTracking();
   }
@@ -254,6 +256,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     _positionSub?.cancel();
     _tts.stop();
     super.dispose();

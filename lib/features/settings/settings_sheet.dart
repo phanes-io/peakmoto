@@ -40,12 +40,12 @@ class SettingsSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                'Settings',
+                'Einstellungen',
                 style: theme.textTheme.headlineLarge,
               ),
               const SizedBox(height: 24),
 
-              _SectionHeader('Appearance'),
+              _SectionHeader('Darstellung'),
               _SettingsGroup(children: [
                 _ThemeRow(
                   isDark: isDark,
@@ -57,17 +57,17 @@ class SettingsSheet extends ConsumerWidget {
               ]),
 
               const SizedBox(height: 24),
-              _SectionHeader('Map'),
+              _SectionHeader('Karte'),
               _SettingsGroup(children: [
                 _SettingsRow(
                   icon: Icons.map_rounded,
-                  label: 'Map Style',
-                  trailing: 'Default',
+                  label: 'Kartenstil',
+                  trailing: 'Standard',
                   onTap: () {},
                 ),
                 _SettingsRow(
                   icon: Icons.download_rounded,
-                  label: 'Offline Maps',
+                  label: 'Offline-Karten',
                   onTap: () {},
                 ),
               ]),
@@ -77,20 +77,20 @@ class SettingsSheet extends ConsumerWidget {
               _SettingsGroup(children: [
                 _SettingsRow(
                   icon: Icons.record_voice_over_rounded,
-                  label: 'Voice Guidance',
-                  trailing: 'On',
+                  label: 'Sprachansagen',
+                  trailing: 'An',
                   onTap: () {},
                 ),
                 _SettingsRow(
                   icon: Icons.speed_rounded,
-                  label: 'Speed Display',
+                  label: 'Geschwindigkeit',
                   trailing: 'km/h',
                   onTap: () {},
                 ),
               ]),
 
               const SizedBox(height: 24),
-              _SectionHeader('About'),
+              _SectionHeader('Info'),
               _SettingsGroup(children: [
                 _SettingsRow(
                   icon: Icons.info_outline_rounded,
@@ -99,14 +99,14 @@ class SettingsSheet extends ConsumerWidget {
                 ),
                 _SettingsRow(
                   icon: Icons.code_rounded,
-                  label: 'Source Code',
+                  label: 'Quellcode',
                   trailing: 'AGPL-3.0',
                   onTap: () {},
                 ),
                 _SettingsRow(
                   icon: Icons.favorite_rounded,
                   iconColor: AppColors.amber,
-                  label: 'Support PeakMoto',
+                  label: 'PeakMoto unterstützen',
                   onTap: () {},
                 ),
               ]),
@@ -141,7 +141,7 @@ class _ThemeRow extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'Dark Mode',
+              'Dunkelmodus',
               style: TextStyle(
                 fontSize: 16,
                 letterSpacing: -0.2,

@@ -36,7 +36,7 @@ class SavedRoutesSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    Text('Saved Routes', style: theme.textTheme.headlineLarge),
+                    Text('Gespeicherte Routen', style: theme.textTheme.headlineLarge),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -70,7 +70,7 @@ class SavedRoutesSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No saved routes yet',
+                        'Noch keine Routen gespeichert',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w500,
@@ -79,7 +79,7 @@ class SavedRoutesSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Routes you save will appear here',
+                        'Gespeicherte Routen erscheinen hier',
                         style: TextStyle(
                           fontSize: 14,
                           color: theme.textTheme.bodyMedium?.color,

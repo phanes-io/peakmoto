@@ -113,7 +113,7 @@ class _SearchSheetState extends State<SearchSheet> {
                             letterSpacing: -0.3,
                           ),
                           decoration: InputDecoration(
-                            hintText: 'City, address, or place...',
+                            hintText: 'Stadt, Adresse oder Ort...',
                             hintStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -194,7 +194,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            hasQuery ? 'No results found' : 'Where do you want to ride?',
+            hasQuery ? 'Keine Ergebnisse' : 'Wohin soll die Fahrt gehen?',
             style: TextStyle(
               fontSize: 16,
               color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.5),
