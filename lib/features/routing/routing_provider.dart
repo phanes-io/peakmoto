@@ -205,6 +205,17 @@ class RoutingNotifier extends StateNotifier<RoutingState> {
     }
   }
 
+  /// Reroute from a new origin (e.g. when user deviates from route)
+  Future<void> rerouteFrom(LatLng newOrigin) async {
+    if (state.waypoints.length < 2) return;
+    final updated = [
+      Waypoint(position: newOrigin, name: 'Start'),
+      ...state.waypoints.sublist(1),
+    ];
+    state = state.copyWith(waypoints: updated, loading: true);
+    await _recalculate();
+  }
+
   void clear() {
     state = RoutingState(prefs: state.prefs, isRoundTrip: false);
   }

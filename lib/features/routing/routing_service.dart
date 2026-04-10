@@ -117,7 +117,14 @@ class RoutingService {
       'custom_model': {
         'priority': priority,
         'speed': [
-          {'if': 'true', 'limit_to': '130'},
+          {'if': 'road_class == MOTORWAY', 'limit_to': '120'},
+          {'if': 'road_class == TRUNK', 'limit_to': '90'},
+          {'if': 'road_class == PRIMARY', 'limit_to': '80'},
+          {'if': 'road_class == SECONDARY', 'limit_to': '70'},
+          {'if': 'road_class == TERTIARY', 'limit_to': '60'},
+          {'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'limit_to': '40'},
+          {'if': 'road_class == SERVICE', 'limit_to': '20'},
+          {'if': 'road_class == UNCLASSIFIED', 'limit_to': '50'},
         ],
         'distance_influence': 90,
       },

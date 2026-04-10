@@ -109,8 +109,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _startNavigation(RouteResult route) {
+    final routing = ref.read(routingProvider);
+    final waypoints = routing.allPositions;
+    final service = ref.read(routingServiceProvider);
+    final prefs = routing.prefs;
+
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => NavigationScreen(route: route)),
+      MaterialPageRoute(
+        builder: (_) => NavigationScreen(
+          route: route,
+          allWaypoints: waypoints,
+          onReroute: (from, remaining) async {
+            final points = [from, ...remaining];
+            final results = await service.calculateRoute(
+              waypoints: points,
+              curvinessLevel: prefs.curvinessLevel,
+              avoidHighways: prefs.avoidHighways,
+              avoidTolls: prefs.avoidTolls,
+              avoidFerries: prefs.avoidFerries,
+            );
+            return results?.first;
+          },
+        ),
+      ),
     );
   }
 
