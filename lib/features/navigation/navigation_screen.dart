@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -19,11 +21,7 @@ class NavigationScreen extends StatefulWidget {
   });
 
   final RouteResult route;
-
-  /// All waypoints so we can reroute to the remaining ones
   final List<LatLng> allWaypoints;
-
-  /// Called when the user deviates and we need a new route
   final Future<RouteResult?> Function(LatLng from, List<LatLng> remaining)?
       onReroute;
 
@@ -41,6 +39,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
   int _currentStep = 0;
   bool _rerouting = false;
   bool _showManeuverList = false;
+  bool _followUser = true;
+
+  /// Index of nearest route segment (for clipping + off-route detection)
+  int _nearestSegmentIdx = 0;
 
   StreamSubscription<Position>? _positionSub;
 
@@ -48,7 +50,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
   int _lastSpokenStep = -1;
   bool _spokenFarAnnounce = false;
 
-  static const _rerouteThresholdM = 75.0;
+  // Reroute cooldown
+  DateTime? _lastRerouteTime;
+
+  static const _rerouteThresholdM = 100.0;
+  static const _rerouteCooldownS = 15;
   static const _advanceThresholdM = 35.0;
   static const _ttsFarDistanceM = 200.0;
   static const _ttsNearDistanceM = 50.0;
@@ -66,6 +72,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
     await _tts.setLanguage('de-DE');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
+    // Duck other audio (music dims instead of pausing)
+    await _tts.setIosAudioCategory(
+      IosTextToSpeechAudioCategory.playback,
+      [IosTextToSpeechAudioCategoryOptions.duckOthers],
+    );
   }
 
   void _startGpsTracking() {
@@ -84,8 +95,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
       _heading = pos.heading;
     });
 
-    // Move map to follow user
-    _mapController.moveAndRotate(newPos, _mapController.camera.zoom < 15 ? 15 : _mapController.camera.zoom, 0);
+    // Move map to follow user (only if not manually panned)
+    if (_followUser) {
+      _mapController.moveAndRotate(
+        newPos,
+        _mapController.camera.zoom < 15 ? 15 : _mapController.camera.zoom,
+        0,
+      );
+    }
+
+    // Update nearest segment (used for route clipping + off-route)
+    _updateNearestSegment(newPos);
 
     // Check if we should advance instruction
     _checkInstructionAdvance(newPos);
@@ -97,11 +117,66 @@ class _NavigationScreenState extends State<NavigationScreen> {
     _checkTts(newPos);
   }
 
+  /// Find the nearest route segment to the current position.
+  /// Only checks a window around the last known segment to avoid O(n) every update.
+  void _updateNearestSegment(LatLng pos) {
+    if (_route.points.length < 2) return;
+
+    final searchStart = max(0, _nearestSegmentIdx - 5);
+    final searchEnd = min(_route.points.length - 1, _nearestSegmentIdx + 40);
+
+    double minDist = double.infinity;
+    int bestIdx = _nearestSegmentIdx;
+
+    for (int i = searchStart; i < searchEnd; i++) {
+      final d = _distToSegment(pos, _route.points[i], _route.points[i + 1]);
+      if (d < minDist) {
+        minDist = d;
+        bestIdx = i;
+      }
+    }
+
+    // Only move forward (or stay), never go backward more than a few segments
+    if (bestIdx >= _nearestSegmentIdx - 2) {
+      _nearestSegmentIdx = bestIdx;
+    }
+  }
+
+  /// Perpendicular distance from point P to line segment A-B (in meters).
+  double _distToSegment(LatLng p, LatLng a, LatLng b) {
+    const dist = Distance();
+
+    // Convert to simple x/y for projection (good enough at this scale)
+    final ax = a.longitude;
+    final ay = a.latitude;
+    final bx = b.longitude;
+    final by = b.latitude;
+    final px = p.longitude;
+    final py = p.latitude;
+
+    final dx = bx - ax;
+    final dy = by - ay;
+    final lenSq = dx * dx + dy * dy;
+
+    if (lenSq == 0) {
+      return dist.as(LengthUnit.Meter, p, a);
+    }
+
+    // Project P onto line A-B, clamped to [0,1]
+    var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+    t = t.clamp(0.0, 1.0);
+
+    final projLat = ay + t * dy;
+    final projLng = ax + t * dx;
+
+    return dist.as(LengthUnit.Meter, p, LatLng(projLat, projLng));
+  }
+
   void _checkInstructionAdvance(LatLng pos) {
     if (_currentStep >= _route.instructions.length - 1) return;
 
-    // Get the interval of route points for the next instruction
-    final nextInstr = _route.instructions[_currentStep + 1] as Map<String, dynamic>;
+    final nextInstr =
+        _route.instructions[_currentStep + 1] as Map<String, dynamic>;
     final nextInterval = nextInstr['interval'] as List?;
     if (nextInterval == null || nextInterval.isEmpty) return;
 
@@ -109,8 +184,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
     if (nextPointIdx >= _route.points.length) return;
     final nextPoint = _route.points[nextPointIdx];
 
-    final dist = const Distance().as(LengthUnit.Meter, pos, nextPoint);
-    if (dist < _advanceThresholdM) {
+    final d = const Distance().as(LengthUnit.Meter, pos, nextPoint);
+    if (d < _advanceThresholdM) {
       setState(() {
         _currentStep++;
         _spokenFarAnnounce = false;
@@ -121,19 +196,29 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void _checkOffRoute(LatLng pos) {
     if (_rerouting || widget.onReroute == null) return;
 
+    // Cooldown after reroute
+    if (_lastRerouteTime != null) {
+      final elapsed = DateTime.now().difference(_lastRerouteTime!).inSeconds;
+      if (elapsed < _rerouteCooldownS) return;
+    }
+
     final minDist = _minDistanceToRoute(pos);
     if (minDist > _rerouteThresholdM) {
       _performReroute(pos);
     }
   }
 
+  /// Minimum distance to route segments around current position.
   double _minDistanceToRoute(LatLng pos) {
-    const dist = Distance();
+    if (_route.points.length < 2) return 0;
+
+    final searchStart = max(0, _nearestSegmentIdx - 5);
+    final searchEnd = min(_route.points.length - 1, _nearestSegmentIdx + 30);
+
     double minD = double.infinity;
-    for (final p in _route.points) {
-      final d = dist.as(LengthUnit.Meter, pos, p);
+    for (int i = searchStart; i < searchEnd; i++) {
+      final d = _distToSegment(pos, _route.points[i], _route.points[i + 1]);
       if (d < minD) minD = d;
-      if (d < _rerouteThresholdM) break; // early exit
     }
     return minD;
   }
@@ -141,7 +226,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Future<void> _performReroute(LatLng from) async {
     setState(() => _rerouting = true);
 
-    // Keep remaining waypoints (skip start, keep intermediate + destination)
     final remaining = widget.allWaypoints.length > 1
         ? widget.allWaypoints.sublist(1)
         : widget.allWaypoints;
@@ -152,12 +236,19 @@ class _NavigationScreenState extends State<NavigationScreen> {
       setState(() {
         _route = newRoute;
         _currentStep = 0;
+        _nearestSegmentIdx = 0;
         _lastSpokenStep = -1;
         _spokenFarAnnounce = false;
         _rerouting = false;
+        _lastRerouteTime = DateTime.now();
       });
     } else {
-      if (mounted) setState(() => _rerouting = false);
+      if (mounted) {
+        setState(() {
+          _rerouting = false;
+          _lastRerouteTime = DateTime.now();
+        });
+      }
     }
   }
 
@@ -193,7 +284,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   String _formatDistanceSpoken(double m) {
     if (m >= 1000) return '${(m / 1000).toStringAsFixed(1)} Kilometern';
-    final rounded = (m / 50).round() * 50; // round to nearest 50
+    final rounded = (m / 50).round() * 50;
     return '$rounded Metern';
   }
 
@@ -202,7 +293,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
     return '${m.round()} m';
   }
 
-  /// Remaining distance from current step onward
   double get _remainingDistanceM {
     double total = 0;
     for (int i = _currentStep; i < _route.instructions.length; i++) {
@@ -212,14 +302,13 @@ class _NavigationScreenState extends State<NavigationScreen> {
     return total;
   }
 
-  /// Remaining time from current step onward
   double get _remainingTimeS {
     double total = 0;
     for (int i = _currentStep; i < _route.instructions.length; i++) {
       final instr = _route.instructions[i] as Map<String, dynamic>;
       total += (instr['time'] as num?)?.toDouble() ?? 0;
     }
-    return total / 1000; // GraphHopper sends ms
+    return total / 1000;
   }
 
   String _formatRemainingDistance(double m) {
@@ -254,6 +343,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
     };
   }
 
+  /// Route points remaining ahead of user
+  List<LatLng> get _remainingRoutePoints {
+    if (_nearestSegmentIdx >= _route.points.length) return _route.points;
+    return _route.points.sublist(_nearestSegmentIdx);
+  }
+
   @override
   void dispose() {
     WakelockPlus.disable();
@@ -274,11 +369,17 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final instrText = currentInstr['text'] as String? ?? '';
     final instrDist = (currentInstr['distance'] as num?)?.toDouble() ?? 0;
 
+    final remainingPoints = _remainingRoutePoints;
+
     return Scaffold(
       body: Stack(
         children: [
-          // Map
-          FlutterMap(
+          // Map with touch detection
+          Listener(
+            onPointerDown: (_) {
+              if (_followUser) setState(() => _followUser = false);
+            },
+            child: FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _route.points.isNotEmpty
@@ -293,21 +394,21 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     : AppConstants.tileUrlLight,
                 userAgentPackageName: 'app.peakmoto.peakmoto',
               ),
-              // Route glow
+              // Route glow (remaining only)
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: _route.points,
+                    points: remainingPoints,
                     strokeWidth: 14,
                     color: AppColors.amber.withValues(alpha: 0.25),
                   ),
                 ],
               ),
-              // Route line
+              // Route line (remaining only)
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: _route.points,
+                    points: remainingPoints,
                     strokeWidth: 6,
                     color: AppColors.amber,
                   ),
@@ -322,7 +423,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       width: 32,
                       height: 32,
                       child: Transform.rotate(
-                        angle: _heading * 3.14159265 / 180,
+                        angle: _heading * pi / 180,
                         child: Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFF007AFF),
@@ -330,8 +431,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
                             border: Border.all(color: Colors.white, width: 3),
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    const Color(0xFF007AFF).withValues(alpha: 0.4),
+                                color: const Color(0xFF007AFF)
+                                    .withValues(alpha: 0.4),
                                 blurRadius: 12,
                                 spreadRadius: 4,
                               ),
@@ -349,6 +450,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 ),
             ],
           ),
+          ),
 
           // Top: Current maneuver card
           Positioned(
@@ -356,7 +458,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
             left: 0,
             right: 0,
             child: GestureDetector(
-              onTap: () => setState(() => _showManeuverList = !_showManeuverList),
+              onTap: () =>
+                  setState(() => _showManeuverList = !_showManeuverList),
               child: Container(
                 color: AppColors.amber,
                 child: SafeArea(
@@ -393,7 +496,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
                             ],
                           ),
                         ),
-                        // Expand/collapse indicator
                         Icon(
                           _showManeuverList
                               ? Icons.expand_less_rounded
@@ -461,8 +563,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
                               t,
                               style: TextStyle(
                                 fontSize: 15,
-                                fontWeight:
-                                    isCurrent ? FontWeight.w600 : FontWeight.w400,
+                                fontWeight: isCurrent
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                                 color: isPast
                                     ? theme.disabledColor
                                     : theme.colorScheme.onSurface,
@@ -482,6 +585,44 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       ),
                     );
                   },
+                ),
+              ),
+            ),
+
+          // Re-center button
+          if (!_followUser)
+            Positioned(
+              right: 16,
+              bottom: 100 + MediaQuery.of(context).padding.bottom,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _followUser = true);
+                  if (_currentPosition != null) {
+                    _mapController.moveAndRotate(
+                      _currentPosition!,
+                      16,
+                      0,
+                    );
+                  }
+                },
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.my_location_rounded,
+                    color: AppColors.amber,
+                    size: 24,
+                  ),
                 ),
               ),
             ),
@@ -519,14 +660,15 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     SizedBox(width: 12),
                     Text(
                       'Route wird neu berechnet...',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
             ),
 
-          // Bottom bar: remaining distance, time, stop button
+          // Bottom bar
           Positioned(
             left: 0,
             right: 0,
@@ -544,7 +686,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ),
               child: Row(
                 children: [
-                  // Remaining info
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -568,7 +709,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     ],
                   ),
                   const Spacer(),
-                  // Stop button
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(

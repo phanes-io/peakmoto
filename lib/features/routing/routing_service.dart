@@ -138,7 +138,7 @@ class RoutingService {
           .post(Uri.parse(url),
               headers: {'Content-Type': 'application/json'},
               body: body)
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 60));
 
       debugPrint('[GraphHopper] Status: ${response.statusCode}, Body: ${response.body.length} bytes');
 
