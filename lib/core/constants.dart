@@ -16,6 +16,15 @@ class AppConstants {
   // Photon Geocoding (self-hosted, fallback to komoot)
   static const photonHost = 'photon.peakmoto.app';
 
+  // Feedback proxy (forwards to Telegram bot)
+  static const feedbackBaseUrl = 'https://feedback.peakmoto.app';
+
+  // Legal pages (GitHub for MVP, later own domain)
+  static const privacyUrl =
+      'https://github.com/phanes-io/peakmoto/blob/main/PRIVACY.md';
+  static const termsUrl =
+      'https://github.com/phanes-io/peakmoto/blob/main/TERMS.md';
+
   // Default map center / Desktop fallback GPS
   static const defaultLat = 51.7640;
   static const defaultLng = 8.7340; // Marienloh, Paderborn

@@ -11,6 +11,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/constants.dart';
 import '../../core/theme/app_colors.dart';
+import '../feedback/feedback_data.dart';
+import '../feedback/feedback_dialog.dart';
+import '../feedback/feedback_service.dart';
 import '../routing/routing_service.dart';
 
 class NavigationScreen extends StatefulWidget {
@@ -18,11 +21,19 @@ class NavigationScreen extends StatefulWidget {
     super.key,
     required this.route,
     required this.allWaypoints,
+    required this.profileName,
+    this.destinationName,
     this.onReroute,
   });
 
   final RouteResult route;
   final List<LatLng> allWaypoints;
+
+  /// GraphHopper profile name used (motorcycle_curvy, etc.)
+  final String profileName;
+
+  /// Display name for the destination (last waypoint)
+  final String? destinationName;
 
   /// Called when user deviates. Receives position, heading (degrees), remaining waypoints.
   final Future<RouteResult?> Function(LatLng from, double heading, List<LatLng> remaining)?
@@ -46,6 +57,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   /// Index of nearest route segment (for clipping + off-route detection)
   int _nearestSegmentIdx = 0;
+
+  /// Arrival state — dialog only shown once
+  bool _arrivalShown = false;
 
   /// Live distance to next maneuver point (updated every GPS tick)
   double _liveDistToNextTurn = 0;
@@ -117,6 +131,70 @@ class _NavigationScreenState extends State<NavigationScreen> {
     _checkInstructionAdvance(newPos);
     _checkOffRoute(newPos);
     _checkTts(newPos);
+    _checkArrival(newPos);
+  }
+
+  /// Detect arrival at final destination (within 50m)
+  void _checkArrival(LatLng pos) {
+    if (_arrivalShown || widget.allWaypoints.isEmpty) return;
+    final destination = widget.allWaypoints.last;
+    final dist = const Distance().as(LengthUnit.Meter, pos, destination);
+    if (dist < 50) {
+      _arrivalShown = true;
+      _tts.speak('Ziel erreicht');
+      _showFeedbackAndExit(arrived: true);
+    }
+  }
+
+  /// Show feedback dialog, submit if rating given, then exit navigation screen
+  Future<void> _showFeedbackAndExit({required bool arrived}) async {
+    if (!mounted) return;
+
+    final result = await showDialog<FeedbackResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => FeedbackDialog(
+        distanceKm: _route.distanceKm,
+        durationMin: (_route.durationS / 60).round(),
+        turnCount: _route.instructions.length,
+        arrived: arrived,
+      ),
+    );
+
+    // Submit in background if user gave a rating
+    if (result != null && result.rating > 0 && widget.allWaypoints.isNotEmpty) {
+      final data = FeedbackData(
+        rating: result.rating,
+        profile: widget.profileName,
+        start: widget.allWaypoints.first,
+        end: widget.allWaypoints.last,
+        endName: widget.destinationName,
+        waypoints: widget.allWaypoints.length > 2
+            ? widget.allWaypoints.sublist(1, widget.allWaypoints.length - 1)
+            : const [],
+        distanceKm: _route.distanceKm,
+        durationMin: (_route.durationS / 60).round(),
+        turnCount: _route.instructions.length,
+        arrived: arrived,
+        comment: result.comment,
+        appVersion: AppConstants.appVersion,
+      );
+      // Fire and forget
+      FeedbackService().submit(data);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Danke für dein Feedback!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _updateNearestSegment(LatLng pos) {
@@ -733,7 +811,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                   ),
                   const Spacer(),
                   GestureDetector(
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => _showFeedbackAndExit(arrived: false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 28, vertical: 14),

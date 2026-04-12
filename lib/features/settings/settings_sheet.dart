@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_provider.dart';
 import '../../core/constants.dart';
+
+Future<void> _openUrl(String url) async {
+  final uri = Uri.parse(url);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
 
 class SettingsSheet extends ConsumerWidget {
   const SettingsSheet({super.key});
@@ -87,6 +95,21 @@ class SettingsSheet extends ConsumerWidget {
               ]),
 
               const SizedBox(height: 24),
+              _SectionHeader('Rechtliches'),
+              _SettingsGroup(children: [
+                _SettingsRow(
+                  icon: Icons.shield_outlined,
+                  label: 'Datenschutz',
+                  onTap: () => _openUrl(AppConstants.privacyUrl),
+                ),
+                _SettingsRow(
+                  icon: Icons.description_outlined,
+                  label: 'Nutzungsbedingungen',
+                  onTap: () => _openUrl(AppConstants.termsUrl),
+                ),
+              ]),
+
+              const SizedBox(height: 24),
               _SectionHeader('Info'),
               _SettingsGroup(children: [
                 _SettingsRow(
@@ -98,13 +121,13 @@ class SettingsSheet extends ConsumerWidget {
                   icon: Icons.code_rounded,
                   label: 'Quellcode',
                   trailing: 'AGPL-3.0',
-                  onTap: () {},
+                  onTap: () => _openUrl('https://github.com/phanes-io/peakmoto'),
                 ),
                 _SettingsRow(
                   icon: Icons.favorite_rounded,
                   iconColor: AppColors.amber,
                   label: 'PeakMoto unterstützen',
-                  onTap: () {},
+                  onTap: () => _openUrl('https://ko-fi.com/peakmoto'),
                 ),
               ]),
               const SizedBox(height: 40),

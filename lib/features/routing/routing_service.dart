@@ -74,6 +74,8 @@ class RoutingService {
       if (!isRoundTrip && withAlternatives && waypoints.length == 2)
         'alternative_route.max_paths': 3,
       'ch.disable': true,
+      // Curvy/Twisty profiles have no LM preparation on server → disable LM
+      if (curvinessLevel >= 2) 'lm.disable': true,
       if (overridePriority.isNotEmpty)
         'custom_model': {
           'priority': overridePriority,

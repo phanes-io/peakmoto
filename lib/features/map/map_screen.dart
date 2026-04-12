@@ -121,11 +121,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final service = ref.read(routingServiceProvider);
     final prefs = routing.prefs;
 
+    final profileName = switch (prefs.curvinessLevel) {
+      0 => 'motorcycle_fast',
+      1 => 'motorcycle_balanced',
+      2 => 'motorcycle_curvy',
+      _ => 'motorcycle_twisty',
+    };
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => NavigationScreen(
           route: route,
           allWaypoints: waypoints,
+          profileName: profileName,
+          destinationName: routing.destinationName,
           onReroute: (from, heading, remaining) async {
             final points = [from, ...remaining];
             final results = await service.calculateRoute(

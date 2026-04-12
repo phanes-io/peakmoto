@@ -1,7 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/constants.dart';
 import '../../core/theme/app_colors.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -21,6 +24,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_seen', true);
     widget.onComplete();
+  }
+
+  Future<void> _openLegal(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _requestLocation() async {
@@ -149,6 +159,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
                 ),
+                // Legal footer on welcome page
+                if (_currentPage == 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                        children: [
+                          const TextSpan(text: 'Mit "Weiter" akzeptierst du unsere\n'),
+                          TextSpan(
+                            text: 'Datenschutzerklärung',
+                            style: const TextStyle(
+                              color: AppColors.amber,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () => _openLegal(AppConstants.privacyUrl),
+                          ),
+                          const TextSpan(text: ' und '),
+                          TextSpan(
+                            text: 'Nutzungsbedingungen',
+                            style: const TextStyle(
+                              color: AppColors.amber,
+                              decoration: TextDecoration.underline,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () => _openLegal(AppConstants.termsUrl),
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (_currentPage == 1)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
