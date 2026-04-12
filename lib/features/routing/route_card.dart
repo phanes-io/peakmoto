@@ -15,6 +15,7 @@ class RouteCard extends StatelessWidget {
     required this.onRouteSelected,
     required this.onClose,
     required this.onStartNavigation,
+    this.onSaveRoute,
   });
 
   final RouteResult route;
@@ -26,6 +27,7 @@ class RouteCard extends StatelessWidget {
   final ValueChanged<int> onRouteSelected;
   final VoidCallback onClose;
   final VoidCallback onStartNavigation;
+  final VoidCallback? onSaveRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -175,27 +177,50 @@ class RouteCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // Start button
-          GestureDetector(
-            onTap: onStartNavigation,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                color: AppColors.amber,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'Navigation starten',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.2,
+          // Start + Save buttons
+          Row(
+            children: [
+              // Save button
+              if (onSaveRoute != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: onSaveRoute,
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.amber.withValues(alpha: 0.4)),
+                      ),
+                      child: const Icon(Icons.bookmark_add_rounded, color: AppColors.amber, size: 20),
+                    ),
+                  ),
+                ),
+              // Start button
+              Expanded(
+                child: GestureDetector(
+                  onTap: onStartNavigation,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.amber,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Navigation starten',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),

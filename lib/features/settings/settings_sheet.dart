@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_provider.dart';
@@ -65,11 +66,7 @@ class SettingsSheet extends ConsumerWidget {
                   trailing: 'Standard',
                   onTap: () {},
                 ),
-                _SettingsRow(
-                  icon: Icons.download_rounded,
-                  label: 'Offline-Karten',
-                  onTap: () {},
-                ),
+                _CacheSizeRow(),
               ]),
 
               const SizedBox(height: 24),
@@ -266,6 +263,101 @@ class _SettingsRow extends StatelessWidget {
                 color: theme.dividerColor,
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CacheSizeRow extends StatefulWidget {
+  @override
+  State<_CacheSizeRow> createState() => _CacheSizeRowState();
+}
+
+class _CacheSizeRowState extends State<_CacheSizeRow> {
+  String _sizeText = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSize();
+  }
+
+  Future<void> _loadSize() async {
+    final size = await const FMTCStore('peakmoto_tiles').stats.size;
+    if (mounted) {
+      setState(() {
+        if (size >= 1024) {
+          _sizeText = '${(size / 1024).toStringAsFixed(1)} GB';
+        } else {
+          _sizeText = '${size.toStringAsFixed(0)} MB';
+        }
+      });
+    }
+  }
+
+  Future<void> _clearCache() async {
+    await const FMTCStore('peakmoto_tiles').manage.delete();
+    await const FMTCStore('peakmoto_tiles').manage.create();
+    _loadSize();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Offline-Karten'),
+            content: Text(
+              'Kartendaten werden automatisch gespeichert.\n\nAktuell: $_sizeText\n\nCache leeren?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Abbrechen'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _clearCache();
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Cache leeren'),
+              ),
+            ],
+          ),
+        );
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(Icons.download_rounded, size: 20, color: theme.textTheme.bodyMedium?.color),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'Offline-Karten',
+                style: TextStyle(
+                  fontSize: 16,
+                  letterSpacing: -0.2,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
+            Text(
+              _sizeText,
+              style: TextStyle(
+                fontSize: 15,
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right_rounded, size: 18, color: theme.dividerColor),
           ],
         ),
       ),

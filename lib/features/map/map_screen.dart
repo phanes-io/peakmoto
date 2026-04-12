@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/constants.dart';
@@ -10,9 +11,12 @@ import '../routing/route_card.dart';
 import '../routing/route_header.dart';
 import '../navigation/navigation_screen.dart';
 import '../routing/round_trip_sheet.dart';
+import '../saved/saved_route.dart';
+import '../saved/saved_routes_provider.dart';
 import '../saved/saved_routes_sheet.dart';
 import '../routing/routing_provider.dart';
 import '../routing/routing_service.dart';
+import 'package:uuid/uuid.dart';
 import '../search/search_service.dart';
 import '../search/search_sheet.dart';
 import '../settings/settings_sheet.dart';
@@ -31,7 +35,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(locationProvider.notifier).locate());
+    Future.microtask(() {
+      ref.read(locationProvider.notifier).locate();
+      ref.read(savedRoutesProvider.notifier).load();
+    });
 
     ref.listenManual(routingProvider, (prev, next) {
       if (prev?.loading == true && !next.loading && next.route != null) {
@@ -119,7 +126,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         builder: (_) => NavigationScreen(
           route: route,
           allWaypoints: waypoints,
-          onReroute: (from, remaining) async {
+          onReroute: (from, heading, remaining) async {
             final points = [from, ...remaining];
             final results = await service.calculateRoute(
               waypoints: points,
@@ -127,12 +134,43 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               avoidHighways: prefs.avoidHighways,
               avoidTolls: prefs.avoidTolls,
               avoidFerries: prefs.avoidFerries,
+              heading: heading,
             );
             return results?.first;
           },
         ),
       ),
     );
+  }
+
+  void _saveCurrentRoute(RoutingState routing) {
+    if (routing.route == null) return;
+    final route = routing.route!;
+    final name = routing.destinationName ?? 'Rundtour ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().year}';
+
+    final saved = SavedRoute(
+      id: const Uuid().v4(),
+      name: name,
+      createdAt: DateTime.now(),
+      distanceKm: route.distanceKm,
+      durationS: route.durationS,
+      ascentM: route.ascentM,
+      points: route.points.map((p) => [p.latitude, p.longitude]).toList(),
+      waypoints: routing.waypoints
+          .map((w) => SavedWaypoint(lat: w.position.latitude, lng: w.position.longitude, name: w.name))
+          .toList(),
+    );
+
+    ref.read(savedRoutesProvider.notifier).save(saved);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Route gespeichert'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _addWaypoint(LatLng point) {
@@ -226,6 +264,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     ? AppConstants.tileUrlDark
                     : AppConstants.tileUrlLight,
                 userAgentPackageName: 'app.peakmoto.peakmoto',
+                tileProvider: const FMTCStore('peakmoto_tiles').getTileProvider(),
               ),
               // Alternative routes (grey, tappable)
               if (routing.hasAlternatives)
@@ -451,6 +490,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ref.read(routingProvider.notifier).selectRoute(i),
                       onClose: () => ref.read(routingProvider.notifier).clear(),
                       onStartNavigation: () => _startNavigation(routing.route!),
+                      onSaveRoute: () => _saveCurrentRoute(routing),
                     ),
             ),
 
@@ -482,7 +522,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
-                      builder: (_) => const SavedRoutesSheet(),
+                      builder: (_) => SavedRoutesSheet(
+                        onLoadRoute: (saved) {
+                          // Load saved route onto map
+                          final pts = saved.latLngPoints;
+                          if (pts.isEmpty) return;
+                          _fitPoints(pts);
+                        },
+                      ),
                     ),
                   ),
                   TabBarItem(

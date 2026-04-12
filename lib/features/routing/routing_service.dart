@@ -19,6 +19,7 @@ class RoutingService {
     bool isRoundTrip = false,
     double roundTripDistanceM = 50000,
     double roundTripHeading = 0,
+    double? heading,
   }) async {
     if (!isRoundTrip && waypoints.length < 2) return null;
     if (isRoundTrip && waypoints.isEmpty) return null;
@@ -28,78 +29,35 @@ class RoutingService {
         .map((p) => [p.longitude, p.latitude])
         .toList();
 
-    // Build priority rules – completely different per mode
+    // Avoid overrides only — curvature/road_class/speed handled by server profiles
     final priority = <Map<String, dynamic>>[];
 
-    // === Always: no bad roads for motorcycles ===
-    priority.add({'if': 'road_class == TRACK || road_class == BRIDLEWAY || road_class == STEPS || road_class == FOOTWAY || road_class == CYCLEWAY', 'multiply_by': '0.01'});
-    priority.add({'if': 'road_class == SERVICE', 'multiply_by': '0.1'});
-    priority.add({'if': 'surface == GRAVEL || surface == DIRT || surface == UNPAVED || surface == SAND', 'multiply_by': '0.05'});
-    priority.add({'if': 'surface == COMPACTED', 'multiply_by': '0.2'});
-    priority.add({'if': 'track_type != MISSING && track_type != GRADE1', 'multiply_by': '0.05'});
-
-    switch (curvinessLevel) {
-      case 0: // === FAST: Shortest time, highways welcome ===
-        if (avoidHighways) {
-          priority.add({'if': 'road_class == MOTORWAY', 'multiply_by': '0.01'});
-        }
-        // Slight penalty for residential but otherwise fast
-        priority.add({'if': 'road_class == SERVICE', 'multiply_by': '0.5'});
-        priority.add({'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'multiply_by': '0.6'});
-
-      case 1: // === BALANCED: Prefer good roads, avoid highways somewhat ===
-        priority.add({'if': 'road_class == MOTORWAY', 'multiply_by': avoidHighways ? '0.01' : '0.4'});
-        priority.add({'if': 'road_class == TRUNK', 'multiply_by': avoidHighways ? '0.1' : '0.6'});
-        priority.add({'if': 'road_class == SERVICE', 'multiply_by': '0.3'});
-        priority.add({'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'multiply_by': '0.4'});
-        priority.add({'if': 'road_class == UNCLASSIFIED', 'multiply_by': '0.6'});
-        // Mild curvature preference
-        priority.add({'if': 'curvature >= 0.95', 'multiply_by': '0.7'});
-        // Mild city avoidance
-        priority.add({'if': 'urban_density == CITY', 'multiply_by': '0.5'});
-
-      case 2: // === CURVY: Landstraßen, keine Highways, Kurven bevorzugen ===
-        priority.add({'if': 'road_class == MOTORWAY', 'multiply_by': '0.01'});
-        priority.add({'if': 'road_class == TRUNK', 'multiply_by': '0.1'});
-        priority.add({'if': 'road_class == SERVICE', 'multiply_by': '0.2'});
-        priority.add({'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'multiply_by': '0.3'});
-        priority.add({'if': 'road_class == UNCLASSIFIED', 'multiply_by': '0.5'});
-        // Strong curvature preference
-        priority.add({'if': 'curvature >= 0.95', 'multiply_by': '0.3'});
-        priority.add({'if': 'curvature >= 0.85', 'multiply_by': '0.5'});
-        // Avoid cities
-        priority.add({'if': 'urban_density == RESIDENTIAL', 'multiply_by': '0.5'});
-        priority.add({'if': 'urban_density == CITY', 'multiply_by': '0.2'});
-
-      default: // === TWISTY: Maximum kurvig, große Umwege akzeptiert ===
-        priority.add({'if': 'road_class == MOTORWAY', 'multiply_by': '0.01'});
-        priority.add({'if': 'road_class == TRUNK', 'multiply_by': '0.05'});
-        priority.add({'if': 'road_class == PRIMARY', 'multiply_by': '0.5'});
-        priority.add({'if': 'road_class == SERVICE', 'multiply_by': '0.1'});
-        priority.add({'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'multiply_by': '0.15'});
-        priority.add({'if': 'road_class == UNCLASSIFIED', 'multiply_by': '0.4'});
-        // Extreme curvature preference – gerade Straßen hart bestrafen
-        priority.add({'if': 'curvature >= 0.95', 'multiply_by': '0.1'});
-        priority.add({'if': 'curvature >= 0.85', 'multiply_by': '0.3'});
-        priority.add({'if': 'curvature >= 0.70', 'multiply_by': '0.5'});
-        // Hard city avoidance
-        priority.add({'if': 'urban_density == RESIDENTIAL', 'multiply_by': '0.3'});
-        priority.add({'if': 'urban_density == CITY', 'multiply_by': '0.1'});
+    if (avoidHighways) {
+      priority.add({'if': 'road_class == MOTORWAY', 'multiply_by': '0.01'});
     }
-
-    // Tolls
     if (avoidTolls) {
       priority.add({'if': 'toll == ALL', 'multiply_by': '0.05'});
     }
-
-    // Ferries
     if (avoidFerries) {
       priority.add({'if': 'road_environment == FERRY', 'multiply_by': '0.05'});
     }
 
+    // Server-side profiles with optimized curvature routing
+    final profileName = switch (curvinessLevel) {
+      0 => 'motorcycle_fast',
+      1 => 'motorcycle_balanced',
+      2 => 'motorcycle_curvy',
+      _ => 'motorcycle_twisty',
+    };
+
+    // Only send avoid overrides as custom_model (tolls, ferries, highways for fast)
+    final overridePriority = <Map<String, dynamic>>[
+      ...priority, // bad roads, surface filters
+    ];
+
     final body = jsonEncode({
       'points': points,
-      'profile': 'motorcycle',
+      'profile': profileName,
       'points_encoded': false,
       'elevation': true,
       'instructions': true,
@@ -109,25 +67,17 @@ class RoutingService {
       if (isRoundTrip) 'round_trip.distance': roundTripDistanceM,
       if (isRoundTrip) 'round_trip.seed': DateTime.now().millisecondsSinceEpoch % 1000,
       if (isRoundTrip && roundTripHeading > 0) 'heading': roundTripHeading,
+      if (!isRoundTrip && heading != null)
+        'headings': [heading.round(), ...List.filled(waypoints.length - 1, 0)],
       if (!isRoundTrip && withAlternatives && waypoints.length == 2)
         'algorithm': 'alternative_route',
       if (!isRoundTrip && withAlternatives && waypoints.length == 2)
         'alternative_route.max_paths': 3,
       'ch.disable': true,
-      'custom_model': {
-        'priority': priority,
-        'speed': [
-          {'if': 'road_class == MOTORWAY', 'limit_to': '120'},
-          {'if': 'road_class == TRUNK', 'limit_to': '90'},
-          {'if': 'road_class == PRIMARY', 'limit_to': '80'},
-          {'if': 'road_class == SECONDARY', 'limit_to': '70'},
-          {'if': 'road_class == TERTIARY', 'limit_to': '60'},
-          {'if': 'road_class == RESIDENTIAL || road_class == LIVING_STREET', 'limit_to': '40'},
-          {'if': 'road_class == SERVICE', 'limit_to': '20'},
-          {'if': 'road_class == UNCLASSIFIED', 'limit_to': '50'},
-        ],
-        'distance_influence': 90,
-      },
+      if (overridePriority.isNotEmpty)
+        'custom_model': {
+          'priority': overridePriority,
+        },
     });
 
     final url = '${AppConstants.routingBaseUrl}/route';

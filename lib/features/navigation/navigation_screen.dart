@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -22,7 +23,9 @@ class NavigationScreen extends StatefulWidget {
 
   final RouteResult route;
   final List<LatLng> allWaypoints;
-  final Future<RouteResult?> Function(LatLng from, List<LatLng> remaining)?
+
+  /// Called when user deviates. Receives position, heading (degrees), remaining waypoints.
+  final Future<RouteResult?> Function(LatLng from, double heading, List<LatLng> remaining)?
       onReroute;
 
   @override
@@ -44,9 +47,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
   /// Index of nearest route segment (for clipping + off-route detection)
   int _nearestSegmentIdx = 0;
 
+  /// Live distance to next maneuver point (updated every GPS tick)
+  double _liveDistToNextTurn = 0;
+
   StreamSubscription<Position>? _positionSub;
 
-  // TTS state — avoid spamming
+  // TTS state
   int _lastSpokenStep = -1;
   bool _spokenFarAnnounce = false;
 
@@ -72,7 +78,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
     await _tts.setLanguage('de-DE');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
-    // Duck other audio (music dims instead of pausing)
     await _tts.setIosAudioCategory(
       IosTextToSpeechAudioCategory.playback,
       [IosTextToSpeechAudioCategoryOptions.duckOthers],
@@ -95,30 +100,25 @@ class _NavigationScreenState extends State<NavigationScreen> {
       _heading = pos.heading;
     });
 
-    // Move map to follow user (only if not manually panned)
+    // [Fix 1] Rotate map to match driving direction
     if (_followUser) {
       _mapController.moveAndRotate(
         newPos,
         _mapController.camera.zoom < 15 ? 15 : _mapController.camera.zoom,
-        0,
+        -_heading,
       );
     }
 
-    // Update nearest segment (used for route clipping + off-route)
     _updateNearestSegment(newPos);
 
-    // Check if we should advance instruction
+    // [Fix 2] Update live distance to next turn
+    _updateLiveDistance(newPos);
+
     _checkInstructionAdvance(newPos);
-
-    // Check if off route → reroute
     _checkOffRoute(newPos);
-
-    // TTS announcements
     _checkTts(newPos);
   }
 
-  /// Find the nearest route segment to the current position.
-  /// Only checks a window around the last known segment to avoid O(n) every update.
   void _updateNearestSegment(LatLng pos) {
     if (_route.points.length < 2) return;
 
@@ -136,40 +136,57 @@ class _NavigationScreenState extends State<NavigationScreen> {
       }
     }
 
-    // Only move forward (or stay), never go backward more than a few segments
     if (bestIdx >= _nearestSegmentIdx - 2) {
       _nearestSegmentIdx = bestIdx;
     }
   }
 
-  /// Perpendicular distance from point P to line segment A-B (in meters).
-  double _distToSegment(LatLng p, LatLng a, LatLng b) {
-    const dist = Distance();
+  /// [Fix 2] Calculate live distance from current position to the next instruction point
+  void _updateLiveDistance(LatLng pos) {
+    if (_currentStep >= _route.instructions.length) return;
 
-    // Convert to simple x/y for projection (good enough at this scale)
-    final ax = a.longitude;
-    final ay = a.latitude;
-    final bx = b.longitude;
-    final by = b.latitude;
-    final px = p.longitude;
-    final py = p.latitude;
-
-    final dx = bx - ax;
-    final dy = by - ay;
-    final lenSq = dx * dx + dy * dy;
-
-    if (lenSq == 0) {
-      return dist.as(LengthUnit.Meter, p, a);
+    // Find the route point index for the NEXT instruction (the turn we're approaching)
+    LatLng? nextTurnPoint;
+    if (_currentStep + 1 < _route.instructions.length) {
+      final nextInstr = _route.instructions[_currentStep + 1] as Map<String, dynamic>;
+      final interval = nextInstr['interval'] as List?;
+      if (interval != null && interval.isNotEmpty) {
+        final idx = (interval[0] as num).toInt();
+        if (idx < _route.points.length) {
+          nextTurnPoint = _route.points[idx];
+        }
+      }
     }
 
-    // Project P onto line A-B, clamped to [0,1]
+    if (nextTurnPoint != null) {
+      _liveDistToNextTurn = const Distance().as(LengthUnit.Meter, pos, nextTurnPoint);
+    }
+  }
+
+  double _distToSegment(LatLng p, LatLng a, LatLng b) {
+    const dist = Distance();
+    final ax = a.longitude, ay = a.latitude;
+    final bx = b.longitude, by = b.latitude;
+    final px = p.longitude, py = p.latitude;
+    final dx = bx - ax, dy = by - ay;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) return dist.as(LengthUnit.Meter, p, a);
     var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
     t = t.clamp(0.0, 1.0);
+    return dist.as(LengthUnit.Meter, p, LatLng(ay + t * dy, ax + t * dx));
+  }
 
-    final projLat = ay + t * dy;
-    final projLng = ax + t * dx;
-
-    return dist.as(LengthUnit.Meter, p, LatLng(projLat, projLng));
+  /// [Fix 4] Project current position onto the nearest segment → smooth clip point
+  LatLng _projectOntoSegment(LatLng p, LatLng a, LatLng b) {
+    final ax = a.longitude, ay = a.latitude;
+    final bx = b.longitude, by = b.latitude;
+    final px = p.longitude, py = p.latitude;
+    final dx = bx - ax, dy = by - ay;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) return a;
+    var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+    t = t.clamp(0.0, 1.0);
+    return LatLng(ay + t * dy, ax + t * dx);
   }
 
   void _checkInstructionAdvance(LatLng pos) {
@@ -196,7 +213,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void _checkOffRoute(LatLng pos) {
     if (_rerouting || widget.onReroute == null) return;
 
-    // Cooldown after reroute
     if (_lastRerouteTime != null) {
       final elapsed = DateTime.now().difference(_lastRerouteTime!).inSeconds;
       if (elapsed < _rerouteCooldownS) return;
@@ -208,13 +224,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
     }
   }
 
-  /// Minimum distance to route segments around current position.
   double _minDistanceToRoute(LatLng pos) {
     if (_route.points.length < 2) return 0;
-
     final searchStart = max(0, _nearestSegmentIdx - 5);
     final searchEnd = min(_route.points.length - 1, _nearestSegmentIdx + 30);
-
     double minD = double.infinity;
     for (int i = searchStart; i < searchEnd; i++) {
       final d = _distToSegment(pos, _route.points[i], _route.points[i + 1]);
@@ -223,6 +236,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     return minD;
   }
 
+  /// [Fix 3] Pass heading to reroute so GraphHopper routes forward, not "turn around"
   Future<void> _performReroute(LatLng from) async {
     setState(() => _rerouting = true);
 
@@ -230,7 +244,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         ? widget.allWaypoints.sublist(1)
         : widget.allWaypoints;
 
-    final newRoute = await widget.onReroute!(from, remaining);
+    final newRoute = await widget.onReroute!(from, _heading, remaining);
     if (newRoute != null && mounted) {
       await _tts.speak('Route wird neu berechnet');
       setState(() {
@@ -266,7 +280,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final dist = const Distance().as(LengthUnit.Meter, pos, instrPoint);
     final text = instr['text'] as String? ?? '';
 
-    // Far announce (~200m)
     if (!_spokenFarAnnounce &&
         _lastSpokenStep != _currentStep &&
         dist <= _ttsFarDistanceM &&
@@ -275,7 +288,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
       _tts.speak('In ${_formatDistanceSpoken(dist)}, $text');
     }
 
-    // Near announce (~50m)
     if (_lastSpokenStep != _currentStep && dist <= _ttsNearDistanceM) {
       _lastSpokenStep = _currentStep;
       _tts.speak(text);
@@ -343,10 +355,20 @@ class _NavigationScreenState extends State<NavigationScreen> {
     };
   }
 
-  /// Route points remaining ahead of user
+  /// [Fix 4] Route points remaining, with smooth projected start point
   List<LatLng> get _remainingRoutePoints {
-    if (_nearestSegmentIdx >= _route.points.length) return _route.points;
-    return _route.points.sublist(_nearestSegmentIdx);
+    if (_route.points.length < 2) return _route.points;
+    if (_nearestSegmentIdx >= _route.points.length - 1) return [_route.points.last];
+
+    final a = _route.points[_nearestSegmentIdx];
+    final b = _route.points[_nearestSegmentIdx + 1];
+
+    // Project current position onto the segment for smooth clipping
+    final projectedPoint = _currentPosition != null
+        ? _projectOntoSegment(_currentPosition!, a, b)
+        : a;
+
+    return [projectedPoint, ..._route.points.sublist(_nearestSegmentIdx + 1)];
   }
 
   @override
@@ -367,7 +389,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
         : <String, dynamic>{};
     final sign = currentInstr['sign'] as int? ?? 0;
     final instrText = currentInstr['text'] as String? ?? '';
-    final instrDist = (currentInstr['distance'] as num?)?.toDouble() ?? 0;
+
+    // [Fix 2] Use live distance instead of static instruction distance
+    final displayDist = _currentPosition != null ? _liveDistToNextTurn : 0.0;
 
     final remainingPoints = _remainingRoutePoints;
 
@@ -393,6 +417,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     ? AppConstants.tileUrlDark
                     : AppConstants.tileUrlLight,
                 userAgentPackageName: 'app.peakmoto.peakmoto',
+                tileProvider: const FMTCStore('peakmoto_tiles').getTileProvider(),
               ),
               // Route glow (remaining only)
               PolylineLayer(
@@ -414,7 +439,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                   ),
                 ],
               ),
-              // Position marker
+              // Position marker — no rotation needed since map rotates with heading
               if (_currentPosition != null)
                 MarkerLayer(
                   markers: [
@@ -422,27 +447,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
                       point: _currentPosition!,
                       width: 32,
                       height: 32,
-                      child: Transform.rotate(
-                        angle: _heading * pi / 180,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF007AFF),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF007AFF)
-                                    .withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                spreadRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.navigation_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF007AFF),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF007AFF)
+                                  .withValues(alpha: 0.4),
+                              blurRadius: 12,
+                              spreadRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.navigation_rounded,
+                          color: Colors.white,
+                          size: 16,
                         ),
                       ),
                     ),
@@ -474,8 +496,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // [Fix 2] Live countdown distance
                               Text(
-                                _formatDistance(instrDist),
+                                _formatDistance(displayDist),
                                 style: const TextStyle(
                                   fontSize: 42,
                                   fontWeight: FontWeight.w800,
@@ -601,7 +624,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     _mapController.moveAndRotate(
                       _currentPosition!,
                       16,
-                      0,
+                      -_heading,
                     );
                   }
                 },
